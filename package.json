@@ -1,0 +1,25 @@
+{
+  "name": "metabot-ai",
+  "version": "1.0.0",
+  "description": "MetaBot AI — Hacktiv8 Session 3 Conversational AI Chatbot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "test": "node test/backend-test.js"
+  },
+  "keywords": [
+    "ai",
+    "chatbot",
+    "gemini",
+    "express",
+    "hacktiv8"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google/genai": "^2.29.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  }
+}
