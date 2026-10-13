@@ -3,13 +3,11 @@ const path = require('path');
 const dotenv = require('dotenv');
 const { GoogleGenAI } = require('@google/genai');
 
-// Load environment variables from .env
-dotenv.config();
+// Load environment variables from root .env file
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.trim() : '';
 
 // Configuration parameters
 const SYSTEM_INSTRUCTION =
@@ -28,14 +26,17 @@ const GENERATION_CONFIG = {
 const MAX_HISTORY_MESSAGES = 20;
 const MAX_MESSAGE_LENGTH = 4000;
 
-// Initialize GoogleGenAI client if API key is provided
-let aiClient = null;
-if (GEMINI_API_KEY) {
-  try {
-    aiClient = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-  } catch (err) {
-    console.error('Failed to initialize GoogleGenAI client:', err.message);
+/**
+ * Retrieve current Gemini configuration from environment variables.
+ * Automatically attempts to reload from the root .env file if the key is not yet present.
+ */
+function getGeminiConfig() {
+  if (!process.env.GEMINI_API_KEY) {
+    dotenv.config({ path: path.join(__dirname, '.env'), override: true });
   }
+  const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+  const model = (process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite').trim();
+  return { apiKey, model };
 }
 
 // Middleware
@@ -79,11 +80,12 @@ setInterval(() => {
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
+  const { apiKey, model } = getGeminiConfig();
   res.json({
     status: 'ok',
     appName: 'MetaBot AI',
-    model: GEMINI_MODEL,
-    apiKeyConfigured: Boolean(GEMINI_API_KEY)
+    model: model,
+    apiKeyConfigured: Boolean(apiKey)
   });
 });
 
@@ -177,17 +179,30 @@ app.post('/api/chat', async (req, res) => {
     });
   }
 
+  const { apiKey, model } = getGeminiConfig();
+
   // Check API key configuration after validating request payload
-  if (!GEMINI_API_KEY || !aiClient) {
+  if (!apiKey) {
+    console.warn('⚠️ [MetaBot AI] Request rejected: GEMINI_API_KEY is not configured in .env');
     return res.status(503).json({
       error: 'Gemini API key is not configured. Please set GEMINI_API_KEY in your .env file.'
+    });
+  }
+
+  let aiClient;
+  try {
+    aiClient = new GoogleGenAI({ apiKey });
+  } catch (initErr) {
+    console.error('Failed to initialize GoogleGenAI client:', initErr.message);
+    return res.status(500).json({
+      error: 'Failed to initialize Gemini AI client. Please verify your GEMINI_API_KEY.'
     });
   }
 
   try {
     // Generate response using official @google/genai SDK
     const response = await aiClient.models.generateContent({
-      model: GEMINI_MODEL,
+      model: model,
       contents: validatedContents,
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
@@ -253,10 +268,11 @@ app.use((err, req, res, next) => {
 // Start server when executed directly
 if (require.main === module) {
   app.listen(PORT, () => {
+    const { apiKey, model } = getGeminiConfig();
     console.log(`===============================================`);
     console.log(` MetaBot AI Server running at http://localhost:${PORT}`);
-    console.log(` Configured Model : ${GEMINI_MODEL}`);
-    console.log(` Gemini API Key   : ${GEMINI_API_KEY ? 'Configured [Active]' : 'Not Set [Configuration Required]'}`);
+    console.log(` Configured Model : ${model}`);
+    console.log(` Gemini API Key   : ${apiKey ? 'Configured [Active]' : 'Not Set [Configuration Required in .env]'}`);
     console.log(`===============================================`);
   });
 }
